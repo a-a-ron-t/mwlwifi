@@ -289,15 +289,15 @@ static ssize_t mwl_debugfs_info_read(struct file *file, char __user *ubuf,
 	char *p = (char *)page;
 	int len = 0, size = PAGE_SIZE;
 	ssize_t ret;
-	const struct hostcmd_get_hw_spec *get_hw_spec;
+	struct hostcmd_get_hw_spec hw_spec;
+	const struct hostcmd_get_hw_spec *get_hw_spec = &hw_spec;
 	int i;
 
 	if (!p)
 		return -ENOMEM;
 
 	/* get and prepare HW specifications */
-	get_hw_spec = mwl_fwcmd_get_hw_specs(priv->hw);
-	if (!get_hw_spec) {
+	if (mwl_fwcmd_get_hw_specs(priv->hw, &hw_spec)) {
 		wiphy_err(priv->hw->wiphy, "fail to get HW specifications\n");
 		goto err_get_hw_specs;
 	}

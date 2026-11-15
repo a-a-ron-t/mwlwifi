@@ -77,6 +77,9 @@
 #define HOSTCMD_CMD_GET_DEVICE_PWR_TBL_SC4      0x118B
 #define HOSTCMD_CMD_QUIET_MODE                  0x1201
 #define HOSTCMD_CMD_CORE_DUMP_DIAG_MODE         0x1202
+/* 0x1203 means a different command to each firmware: SLOT_TIME is only
+ * sent to the 88W8997 and GET_FW_CORE_DUMP only to the 88W8964.
+ */
 #define HOSTCMD_CMD_802_11_SLOT_TIME            0x1203
 #define HOSTCMD_CMD_GET_FW_CORE_DUMP            0x1203
 #define HOSTCMD_CMD_EDMAC_CTRL                  0x1204

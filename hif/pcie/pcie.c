@@ -194,7 +194,8 @@ static int pcie_init_8997(struct ieee80211_hw *hw)
 {
 	struct mwl_priv *priv = hw->priv;
 	struct pcie_priv *pcie_priv = priv->hif.priv;
-	const struct hostcmd_get_hw_spec *get_hw_spec;
+	struct hostcmd_get_hw_spec hw_spec;
+	const struct hostcmd_get_hw_spec *get_hw_spec = &hw_spec;
 	struct hostcmd_set_hw_spec set_hw_spec;
 	int rc, i;
 
@@ -230,8 +231,7 @@ static int pcie_init_8997(struct ieee80211_hw *hw)
 	}
 
 	/* get and prepare HW specifications */
-	get_hw_spec = mwl_fwcmd_get_hw_specs(hw);
-	if (!get_hw_spec) {
+	if (mwl_fwcmd_get_hw_specs(hw, &hw_spec)) {
 		wiphy_err(hw->wiphy, "%s: fail to get HW specifications\n",
 			  PCIE_DRV_NAME);
 		rc = -EIO;
@@ -295,7 +295,8 @@ static int pcie_init_8864(struct ieee80211_hw *hw)
 {
 	struct mwl_priv *priv = hw->priv;
 	struct pcie_priv *pcie_priv = priv->hif.priv;
-	const struct hostcmd_get_hw_spec *get_hw_spec;
+	struct hostcmd_get_hw_spec hw_spec;
+	const struct hostcmd_get_hw_spec *get_hw_spec = &hw_spec;
 	struct hostcmd_set_hw_spec set_hw_spec;
 	int rc, i;
 
@@ -328,8 +329,7 @@ static int pcie_init_8864(struct ieee80211_hw *hw)
 	}
 
 	/* get and prepare HW specifications */
-	get_hw_spec = mwl_fwcmd_get_hw_specs(hw);
-	if (!get_hw_spec) {
+	if (mwl_fwcmd_get_hw_specs(hw, &hw_spec)) {
 		wiphy_err(hw->wiphy, "%s: fail to get HW specifications\n", PCIE_DRV_NAME);
 		rc = -EIO;
 		goto err_get_hw_specs;
@@ -783,7 +783,8 @@ static int pcie_init_ndp(struct ieee80211_hw *hw)
 {
 	struct mwl_priv *priv = hw->priv;
 	struct pcie_priv *pcie_priv = priv->hif.priv;
-	const struct hostcmd_get_hw_spec *get_hw_spec;
+	struct hostcmd_get_hw_spec hw_spec;
+	const struct hostcmd_get_hw_spec *get_hw_spec = &hw_spec;
 	struct hostcmd_set_hw_spec set_hw_spec;
 	int rc;
 
@@ -815,8 +816,7 @@ static int pcie_init_ndp(struct ieee80211_hw *hw)
 	}
 
 	/* get and prepare HW specifications */
-	get_hw_spec = mwl_fwcmd_get_hw_specs(hw);
-	if (!get_hw_spec) {
+	if (mwl_fwcmd_get_hw_specs(hw, &hw_spec)) {
 		wiphy_err(hw->wiphy, "%s: fail to get HW specifications\n",
 			  PCIE_DRV_NAME);
 		rc = -EIO;

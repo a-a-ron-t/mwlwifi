@@ -825,8 +825,22 @@ static int mwl_fwcmd_parse_hex(const u8 *src, size_t len, u8 *dst,
 	return n;
 }
 
-const struct hostcmd_get_hw_spec
-*mwl_fwcmd_get_hw_specs(struct ieee80211_hw *hw)
+/* Like mwl_fwcmd_parse_hex(), but fails unless exactly @want bytes are
+ * parsed, so the destination is never left partly uninitialised.
+ */
+static int mwl_fwcmd_parse_hex_exact(const u8 *src, size_t len, u8 *dst,
+				     size_t want, size_t *consumed)
+{
+	int n = mwl_fwcmd_parse_hex(src, len, dst, want, consumed);
+
+	if (n < 0)
+		return n;
+
+	return n == want ? 0 : -EINVAL;
+}
+
+int mwl_fwcmd_get_hw_specs(struct ieee80211_hw *hw,
+			   struct hostcmd_get_hw_spec *spec)
 {
 	struct mwl_priv *priv = hw->priv;
 	struct hostcmd_cmd_get_hw_spec *pcmd = priv->pcmd_buf;
@@ -845,7 +859,7 @@ const struct hostcmd_get_hw_spec
 		if (retry++ > MAX_WAIT_GET_HW_SPECS_ITERATONS) {
 			wiphy_err(hw->wiphy, "can't get hw specs\n");
 			mutex_unlock(&priv->fwcmd_mutex);
-			return NULL;
+			return -EIO;
 		}
 
 		msleep(1000);
@@ -853,9 +867,13 @@ const struct hostcmd_get_hw_spec
 			    "repeat command = %p\n", pcmd);
 	}
 
+	/* Copy the result out: the command buffer is reused by the next
+	 * command once the mutex is released.
+	 */
+	memcpy(spec, &pcmd->hw_spec, sizeof(*spec));
 	mutex_unlock(&priv->fwcmd_mutex);
 
-	return &pcmd->hw_spec;
+	return 0;
 }
 
 int mwl_fwcmd_set_hw_specs(struct ieee80211_hw *hw,
@@ -1026,9 +1044,11 @@ int mwl_fwcmd_max_tx_power(struct ieee80211_hw *hw,
 	}
 
 	if (priv->chip_type == MWL8997) {
-		mwl_fwcmd_get_tx_powers(priv, priv->max_tx_pow,
-					HOSTCMD_ACT_GET_MAX_TX_PWR,
-					channel->hw_value, band, width, sub_ch);
+		rc = mwl_fwcmd_get_tx_powers(priv, priv->max_tx_pow,
+					     HOSTCMD_ACT_GET_MAX_TX_PWR,
+					     channel->hw_value, band, width, sub_ch);
+		if (rc)
+			return rc;
 
 		for (i = 0; i < priv->pwr_level; i++) {
 			tmp = priv->max_tx_pow[i];
@@ -1044,16 +1064,20 @@ int mwl_fwcmd_max_tx_power(struct ieee80211_hw *hw,
 	}
 
 	if ((priv->powinited & MWL_POWER_INIT_2) == 0) {
-		mwl_fwcmd_get_tx_powers(priv, priv->max_tx_pow,
-					HOSTCMD_ACT_GEN_GET_LIST,
-					channel->hw_value, band, width, sub_ch);
+		rc = mwl_fwcmd_get_tx_powers(priv, priv->max_tx_pow,
+					     HOSTCMD_ACT_GEN_GET_LIST,
+					     channel->hw_value, band, width, sub_ch);
+		if (rc)
+			return rc;
 		priv->powinited |= MWL_POWER_INIT_2;
 	}
 
 	if ((priv->powinited & MWL_POWER_INIT_1) == 0) {
-		mwl_fwcmd_get_tx_powers(priv, priv->target_powers,
-					HOSTCMD_ACT_GEN_GET_LIST,
-					channel->hw_value, band, width, sub_ch);
+		rc = mwl_fwcmd_get_tx_powers(priv, priv->target_powers,
+					     HOSTCMD_ACT_GEN_GET_LIST,
+					     channel->hw_value, band, width, sub_ch);
+		if (rc)
+			return rc;
 		priv->powinited |= MWL_POWER_INIT_1;
 	}
 
@@ -1135,9 +1159,11 @@ int mwl_fwcmd_tx_power(struct ieee80211_hw *hw,
 	}
 
 	if (priv->chip_type == MWL8997) {
-		mwl_fwcmd_get_tx_powers(priv, priv->target_powers,
-					HOSTCMD_ACT_GET_TARGET_TX_PWR,
-					channel->hw_value, band, width, sub_ch);
+		rc = mwl_fwcmd_get_tx_powers(priv, priv->target_powers,
+					     HOSTCMD_ACT_GET_TARGET_TX_PWR,
+					     channel->hw_value, band, width, sub_ch);
+		if (rc)
+			return rc;
 
 		for (i = 0; i < priv->pwr_level; i++) {
 			tmp = priv->target_powers[i];
@@ -1187,17 +1213,21 @@ int mwl_fwcmd_tx_power(struct ieee80211_hw *hw,
 	}
 
 	if ((priv->powinited & MWL_POWER_INIT_2) == 0) {
-		mwl_fwcmd_get_tx_powers(priv, priv->max_tx_pow,
-					HOSTCMD_ACT_GEN_GET_LIST,
-					channel->hw_value, band, width, sub_ch);
+		rc = mwl_fwcmd_get_tx_powers(priv, priv->max_tx_pow,
+					     HOSTCMD_ACT_GEN_GET_LIST,
+					     channel->hw_value, band, width, sub_ch);
+		if (rc)
+			return rc;
 
 		priv->powinited |= MWL_POWER_INIT_2;
 	}
 
 	if ((priv->powinited & MWL_POWER_INIT_1) == 0) {
-		mwl_fwcmd_get_tx_powers(priv, priv->target_powers,
-					HOSTCMD_ACT_GEN_GET_LIST,
-					channel->hw_value, band, width, sub_ch);
+		rc = mwl_fwcmd_get_tx_powers(priv, priv->target_powers,
+					     HOSTCMD_ACT_GEN_GET_LIST,
+					     channel->hw_value, band, width, sub_ch);
+		if (rc)
+			return rc;
 
 		priv->powinited |= MWL_POWER_INIT_1;
 	}
@@ -1701,7 +1731,8 @@ int mwl_fwcmd_set_linkadapt_cs_mode(struct ieee80211_hw *hw, u16 cs_mode)
 
 int mwl_fwcmd_dump_otp_data(struct ieee80211_hw *hw)
 {
-	int otp_data_len;
+	u16 resp_len;
+	size_t otp_data_len;
 	struct mwl_priv *priv = hw->priv;
 	struct hostcmd_cmd_dump_otp_data *pcmd;
 
@@ -1718,10 +1749,16 @@ int mwl_fwcmd_dump_otp_data(struct ieee80211_hw *hw)
 		return -EIO;
 	}
 
-	otp_data_len = pcmd->cmd_hdr.len - cpu_to_le16(sizeof(*pcmd));
+	resp_len = le16_to_cpu(pcmd->cmd_hdr.len);
+	if (resp_len < sizeof(*pcmd)) {
+		mutex_unlock(&priv->fwcmd_mutex);
+		wiphy_err(hw->wiphy, "OTP response too short: %u\n", resp_len);
+		return -EIO;
+	}
+	otp_data_len = resp_len - sizeof(*pcmd);
 
 	if (otp_data_len <= SYSADPT_OTP_BUF_SIZE) {
-		wiphy_info(hw->wiphy, "OTP data len = %d\n", otp_data_len);
+		wiphy_info(hw->wiphy, "OTP data len = %zu\n", otp_data_len);
 		priv->otp_data.len = otp_data_len;
 		memcpy(priv->otp_data.buf, pcmd->pload, otp_data_len);
 	} else {
@@ -3515,6 +3552,7 @@ int mwl_fwcmd_set_txpwrlmt_cfg_data(struct ieee80211_hw *hw)
 		     offsetof(struct hostcmd_cmd_txpwrlmt_cfg, data);
 	size_t size, parsed_len;
 	u16 id;
+	bool last;
 	__le32 txpwr_cfg_sig;
 	u8 version[TXPWRLMT_CFG_VERSION_INFO_LEN];
 	const u8 *ptr;
@@ -3526,8 +3564,8 @@ int mwl_fwcmd_set_txpwrlmt_cfg_data(struct ieee80211_hw *hw)
 	size = priv->txpwrlmt_file->size;
 
 	/* Parsing TxPwrLmit Conf file Signature */
-	if (mwl_fwcmd_parse_hex(ptr, size, (u8 *)&txpwr_cfg_sig,
-				TXPWRLMT_CFG_SIG_LEN, &parsed_len) < 0)
+	if (mwl_fwcmd_parse_hex_exact(ptr, size, (u8 *)&txpwr_cfg_sig,
+				      TXPWRLMT_CFG_SIG_LEN, &parsed_len) < 0)
 		return -EINVAL;
 
 	ptr += parsed_len;
@@ -3540,8 +3578,8 @@ int mwl_fwcmd_set_txpwrlmt_cfg_data(struct ieee80211_hw *hw)
 	}
 
 	/* Parsing TxPwrLmit Conf file Version */
-	if (mwl_fwcmd_parse_hex(ptr, size, version,
-				TXPWRLMT_CFG_VERSION_INFO_LEN, &parsed_len) < 0)
+	if (mwl_fwcmd_parse_hex_exact(ptr, size, version,
+				      TXPWRLMT_CFG_VERSION_INFO_LEN, &parsed_len) < 0)
 		return -EINVAL;
 
 	ptr += parsed_len;
@@ -3551,8 +3589,8 @@ int mwl_fwcmd_set_txpwrlmt_cfg_data(struct ieee80211_hw *hw)
 		u16 data_len;
 
 		/*Parsing tx pwr cfg subband header info*/
-		if (mwl_fwcmd_parse_hex(ptr, size, (u8 *)&hdr, sizeof(hdr),
-					&parsed_len) < 0)
+		if (mwl_fwcmd_parse_hex_exact(ptr, size, (u8 *)&hdr,
+					      sizeof(hdr), &parsed_len) < 0)
 			return -EINVAL;
 
 		ptr += parsed_len;
@@ -3575,8 +3613,8 @@ int mwl_fwcmd_set_txpwrlmt_cfg_data(struct ieee80211_hw *hw)
 		pcmd->num_entries = hdr.num_entries;
 
 		/* Parsing tx pwr cfg subband header info */
-		if (mwl_fwcmd_parse_hex(ptr, size, pcmd->data, data_len,
-					&parsed_len) < 0) {
+		if (mwl_fwcmd_parse_hex_exact(ptr, size, pcmd->data, data_len,
+					      &parsed_len) < 0) {
 			mutex_unlock(&priv->fwcmd_mutex);
 			return -EIO;
 		}
@@ -3588,7 +3626,8 @@ int mwl_fwcmd_set_txpwrlmt_cfg_data(struct ieee80211_hw *hw)
 		pcmd->cmd_hdr.len = cpu_to_le16(struct_size(pcmd, data,
 							    data_len));
 
-		if (size < sizeof(struct mwl_txpwrlmt_cfg_entry_hdr))
+		last = size < sizeof(struct mwl_txpwrlmt_cfg_entry_hdr);
+		if (last)
 			pcmd->cfgComplete = 1;
 
 		if (mwl_hif_exec_cmd(hw, HOSTCMD_CMD_TXPWRLMT_CFG)) {
@@ -3597,6 +3636,10 @@ int mwl_fwcmd_set_txpwrlmt_cfg_data(struct ieee80211_hw *hw)
 		}
 
 		mutex_unlock(&priv->fwcmd_mutex);
+
+		/* Nothing left to parse into another subband header. */
+		if (last)
+			break;
 	}
 
 	return 0;
@@ -3606,7 +3649,12 @@ int mwl_fwcmd_get_txpwrlmt_cfg_data(struct ieee80211_hw *hw)
 {
 	struct mwl_priv *priv = hw->priv;
 	struct hostcmd_cmd_txpwrlmt_cfg *pcmd;
-	u16 subband_len, total_len = 0;
+	/* The reply carries the header and action, then the subband data
+	 * starting at subband_id.
+	 */
+	size_t skip = offsetof(struct hostcmd_cmd_txpwrlmt_cfg, subband_id);
+	size_t subband_len, total_len = 0;
+	u16 resp_len;
 	u8 id;
 
 	for (id = 0; id < TXPWRLMT_CFG_MAX_SUBBAND_INFO; id++) {
@@ -3629,12 +3677,20 @@ int mwl_fwcmd_get_txpwrlmt_cfg_data(struct ieee80211_hw *hw)
 			return -EIO;
 		}
 
-		mutex_unlock(&priv->fwcmd_mutex);
+		resp_len = le16_to_cpu(pcmd->cmd_hdr.len);
+		if (resp_len < skip || resp_len > MWL_CMD_BUF_SIZE) {
+			mutex_unlock(&priv->fwcmd_mutex);
+			wiphy_err(hw->wiphy,
+				  "invalid TxPwrLmt response length %u\n",
+				  resp_len);
+			return -EIO;
+		}
+		subband_len = resp_len - skip;
 
-		subband_len = le16_to_cpu(pcmd->cmd_hdr.len) -
-			sizeof(struct hostcmd_header) - 2;
-		if (total_len <= SYSADPT_TXPWRLMT_CFG_BUF_SIZE) {
-			wiphy_debug(hw->wiphy, "Subband len = %d\n",
+		/* Leave room for the newline after the subband. */
+		if (subband_len + 1 <=
+		    SYSADPT_TXPWRLMT_CFG_BUF_SIZE - total_len) {
+			wiphy_debug(hw->wiphy, "Subband len = %zu\n",
 				    subband_len);
 			memcpy(priv->txpwrlmt_data.buf + total_len,
 			       &pcmd->subband_id, subband_len);
@@ -3646,6 +3702,8 @@ int mwl_fwcmd_get_txpwrlmt_cfg_data(struct ieee80211_hw *hw)
 			wiphy_err(hw->wiphy,
 				  "TxPwrLmt cfg buf size is not enough\n");
 		}
+
+		mutex_unlock(&priv->fwcmd_mutex);
 	}
 
 	return 0;

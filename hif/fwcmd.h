@@ -68,8 +68,8 @@ enum encr_type {
 
 char *mwl_fwcmd_get_cmd_string(unsigned short cmd);
 
-const struct hostcmd_get_hw_spec
-*mwl_fwcmd_get_hw_specs(struct ieee80211_hw *hw);
+int mwl_fwcmd_get_hw_specs(struct ieee80211_hw *hw,
+			   struct hostcmd_get_hw_spec *spec);
 
 int mwl_fwcmd_set_hw_specs(struct ieee80211_hw *hw,
 			   struct hostcmd_set_hw_spec *spec);
