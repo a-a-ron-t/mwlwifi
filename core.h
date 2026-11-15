@@ -384,8 +384,8 @@ struct beacon_info {
 	u8 ie_rsn48_len;
 	u8 ie_mde_len;
 	u8 ie_rsnx_len;
-	u8 ie_ht_len;
-	u8 ie_vht_len;
+	u16 ie_ht_len;
+	u16 ie_vht_len;
 	u8 ie_country_len;
 	u8 ie_meshid_len;
 	u8 ie_meshcfg_len;

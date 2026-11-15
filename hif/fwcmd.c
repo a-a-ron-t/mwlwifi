@@ -385,11 +385,11 @@ static void mwl_fwcmd_parse_beacon(struct mwl_priv *priv,
 		case WLAN_EID_HT_OPERATION:
 		case WLAN_EID_OVERLAP_BSS_SCAN_PARAM:
 		case WLAN_EID_EXT_CAPABILITY:
-			beacon_info->ie_ht_len += (elen + 2);
-			if (beacon_info->ie_ht_len >
-			    sizeof(beacon_info->ie_list_ht)) {
+			if (elen + 2 > sizeof(beacon_info->ie_list_ht) -
+			    beacon_info->ie_ht_len) {
 				elem_parse_failed = true;
 			} else {
+				beacon_info->ie_ht_len += elen + 2;
 				*beacon_info->ie_ht_ptr++ = id;
 				*beacon_info->ie_ht_ptr++ = elen;
 				memcpy(beacon_info->ie_ht_ptr, pos, elen);
@@ -411,11 +411,11 @@ static void mwl_fwcmd_parse_beacon(struct mwl_priv *priv,
 		case WLAN_EID_VHT_CAPABILITY:
 		case WLAN_EID_VHT_OPERATION:
 		case WLAN_EID_OPMODE_NOTIF:
-			beacon_info->ie_vht_len += (elen + 2);
-			if (beacon_info->ie_vht_len >
-			    sizeof(beacon_info->ie_list_vht)) {
+			if (elen + 2 > sizeof(beacon_info->ie_list_vht) -
+			    beacon_info->ie_vht_len) {
 				elem_parse_failed = true;
 			} else {
+				beacon_info->ie_vht_len += elen + 2;
 				*beacon_info->ie_vht_ptr++ = id;
 				*beacon_info->ie_vht_ptr++ = elen;
 				memcpy(beacon_info->ie_vht_ptr, pos, elen);
