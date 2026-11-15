@@ -272,10 +272,13 @@ static void mwl_process_of_dts(struct mwl_priv *priv)
 {
 #ifdef CONFIG_OF
 	struct property *prop;
-	u32 prop_value;
+	u32 chainmask[2];
 
+	/* of_find_node_by_name() drops a reference on the node it starts
+	 * from, so take one for it.
+	 */
 	priv->dt_node =
-		of_find_node_by_name(mwl_hif_device_node(priv->hw),
+		of_find_node_by_name(of_node_get(mwl_hif_device_node(priv->hw)),
 				     "mwlwifi");
 	if (!priv->dt_node)
 		return;
@@ -286,25 +289,29 @@ static void mwl_process_of_dts(struct mwl_priv *priv)
 			priv->disable_2g = true;
 		if (strcmp(prop->name, "marvell,5ghz") == 0)
 			priv->disable_5g = true;
-		if (strcmp(prop->name, "marvell,chainmask") == 0) {
-			prop_value = be32_to_cpup((__be32 *)prop->value);
-			if (prop_value == 2)
-				priv->antenna_tx = ANTENNA_TX_2;
-			else if (prop_value == 3)
-				priv->antenna_tx = ANTENNA_TX_3;
-
-			prop_value = be32_to_cpup((__be32 *)prop->value + 1);
-			if (prop_value == 2)
-				priv->antenna_rx = ANTENNA_RX_2;
-			else if (prop_value == 3)
-				priv->antenna_rx = ANTENNA_RX_3;
-		}
 	}
 
-	priv->pwr_node = of_find_node_by_name(priv->dt_node,
+	/* <tx rx>; ignored unless both cells are present */
+	if (!of_property_read_u32_array(priv->dt_node, "marvell,chainmask",
+					chainmask, ARRAY_SIZE(chainmask))) {
+		if (chainmask[0] == 2)
+			priv->antenna_tx = ANTENNA_TX_2;
+		else if (chainmask[0] == 3)
+			priv->antenna_tx = ANTENNA_TX_3;
+
+		if (chainmask[1] == 2)
+			priv->antenna_rx = ANTENNA_RX_2;
+		else if (chainmask[1] == 3)
+			priv->antenna_rx = ANTENNA_RX_3;
+	}
+
+	priv->pwr_node = of_find_node_by_name(of_node_get(priv->dt_node),
 					      "marvell,powertable");
 #endif
 }
+
+#define MWL_PWR_TBL_ENTRY_SIZE \
+	((int)sizeof(__be32) * (2 + SYSADPT_TX_POWER_LEVEL_TOTAL + 2))
 
 static void mwl_reg_notifier(struct wiphy *wiphy,
 			     struct regulatory_request *request)
@@ -365,10 +372,14 @@ static void mwl_reg_notifier(struct wiphy *wiphy,
 				memset(&priv->tx_pwr_tbl[i], 0,
 				       sizeof(struct mwl_tx_pwr_tbl));
 
-			/* Load related power table */
+			/* Load related power table: each entry is channel,
+			 * setcap, the power levels, cdd and txantenna2.
+			 * Only load complete entries that fit in the table.
+			 */
 			i = 0;
 			j = 0;
-			while (i < prop->length) {
+			while (prop->length - i >= MWL_PWR_TBL_ENTRY_SIZE &&
+			       j < SYSADPT_MAX_NUM_CHANNELS) {
 				prop_value =
 					be32_to_cpu(*(__be32 *)
 						    (prop->value + i));
@@ -1117,6 +1128,9 @@ struct ieee80211_hw *mwl_alloc_hw(int bus_type,
 void mwl_free_hw(struct ieee80211_hw *hw)
 {
 	struct mwl_priv *priv = hw->priv;
+
+	of_node_put(priv->pwr_node);
+	of_node_put(priv->dt_node);
 
 	kfree(priv->stnid);
 	kfree(priv->ampdu);
