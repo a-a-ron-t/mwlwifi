@@ -21,6 +21,8 @@
 #include "core.h"
 #include "utils.h"
 
+const u8 TX_HISTO_PER_THRES[TX_RATE_HISTO_PER_CNT - 1] = {6, 12, 20, 30};
+
 static unsigned short phy_rate[][5] = {
 	{2,   13,  15,  27,  30},   /* 0  */
 	{4,   26,  29,  54,  60},   /* 1  */

@@ -117,7 +117,7 @@
 #define TXBF_MODE_AUTO                0x06
 #define TXBF_MODE_BFMER_AUTO          0x07
 
-static const u8 TX_HISTO_PER_THRES[TX_RATE_HISTO_PER_CNT - 1] = {6, 12, 20, 30};
+extern const u8 TX_HISTO_PER_THRES[TX_RATE_HISTO_PER_CNT - 1];
 
 enum {
 	MWL8864 = 0,
