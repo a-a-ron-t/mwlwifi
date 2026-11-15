@@ -263,8 +263,6 @@ static inline void pcie_tx_skb(struct mwl_priv *priv, int desc_num,
 	struct pcie_tx_ctrl *tx_ctrl;
 	struct pcie_tx_hndl *tx_hndl = NULL;
 	struct pcie_tx_desc *tx_desc;
-	struct pcie_dma_data *dma_data;
-	struct ieee80211_hdr *wh;
 	dma_addr_t dma;
 	u32 flags = 0;
 	int tailpad = 0;
@@ -286,8 +284,6 @@ static inline void pcie_tx_skb(struct mwl_priv *priv, int desc_num,
 
 	tx_hndl = pcie_priv->desc_data[desc_num].pnext_tx_hndl;
 	tx_desc = tx_hndl->pdesc;
-	dma_data = (struct pcie_dma_data *)tx_skb->data;
-	wh = &dma_data->wh;
 
 	if (tx_info->flags & IEEE80211_TX_INTFL_DONT_ENCRYPT)
 		flags |= PCIE_TX_WCB_FLAGS_DONT_ENCRYPT;
@@ -508,8 +504,6 @@ static void pcie_non_pfu_tx_done(struct mwl_priv *priv)
 int pcie_8864_tx_init(struct ieee80211_hw *hw)
 {
 	struct mwl_priv *priv = hw->priv;
-	struct sk_buff skb;
-	struct ieee80211_tx_info *tx_info = IEEE80211_SKB_CB(&skb);
 	int rc;
 
 	/* Fields after the driver's own data are still used: the vif by
@@ -518,14 +512,6 @@ int pcie_8864_tx_init(struct ieee80211_hw *hw)
 	BUILD_BUG_ON(sizeof(struct pcie_tx_ctrl) >
 		     offsetof(struct ieee80211_tx_info, control.vif) -
 		     offsetof(struct ieee80211_tx_info, driver_data));
-
-	if (sizeof(struct pcie_tx_ctrl) >
-	    sizeof(tx_info->driver_data)) {
-		wiphy_err(hw->wiphy, "driver data is not enough: %zu (%zu)\n",
-			  sizeof(struct pcie_tx_ctrl),
-			  sizeof(tx_info->driver_data));
-		return -ENOMEM;
-	}
 
 	rc = pcie_tx_ring_alloc(priv);
 

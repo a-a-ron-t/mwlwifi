@@ -289,6 +289,7 @@ static inline int pcie_tx_skb_ndp(struct mwl_priv *priv,
 	tx_info = IEEE80211_SKB_CB(tx_skb);
 	tx_ctrl = (struct pcie_tx_ctrl_ndp *)tx_info->driver_data;
 	pnext_tx_desc = &desc->ptx_ring[tx_send_head_new];
+	memset(pnext_tx_desc, 0, sizeof(*pnext_tx_desc));
 
 	if (tx_ctrl->flags & TX_CTRL_TYPE_DATA) {
 		wh = (struct ieee80211_hdr *)tx_skb->data;

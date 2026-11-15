@@ -224,7 +224,7 @@ struct pcie_dma_data {
 	__le16 fwlen;
 	struct ieee80211_hdr wh;
 	char data[];
-} __packed;
+} __packed __aligned(2);
 
 /* New Data Path */
 #define MACREG_REG_SCRATCH3                0x00000C44
@@ -573,7 +573,7 @@ struct pcie_data_buf {
 struct pcie_pfu_dma_data {
 	struct pcie_tx_desc tx_desc;
 	struct pcie_dma_data dma_data;
-} __packed;
+} __packed __aligned(2);
 
 struct pcie_priv {
 	struct mwl_priv *mwl_priv;
@@ -674,7 +674,7 @@ struct acnt_tx_s { /* Accounting Record For Tx (at Enqueue time) */
 	struct tx_info tx_info;/* Transmit parameters used for 1st MPDU/AMPDU */
 	struct pcie_dma_data hdr;/* Dot11 header used for 1st MPDU in AMPDU   */
 	u8 payload[];        /* Variable Payload by use case                 */
-} __packed;
+} __packed __aligned(2);
 
 struct acnt_rx_s { /* Accounting Record for Rx PPDU */
 	__le16 code;          /* Unique code for each type                    */
