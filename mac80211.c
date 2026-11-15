@@ -691,10 +691,9 @@ static int mwl_mac80211_sta_add(struct ieee80211_hw *hw,
 	} else
 		rc = mwl_fwcmd_set_new_stn_add(hw, vif, sta);
 
-	if ((vif->type == NL80211_IFTYPE_STATION) && !use_4addr)
-		mwl_hif_set_sta_id(hw, sta, true, true);
-	else
-		mwl_hif_set_sta_id(hw, sta, false, true);
+	sta_info->link_sta_mode = (vif->type == NL80211_IFTYPE_STATION) &&
+				  !use_4addr;
+	mwl_hif_set_sta_id(hw, sta, sta_info->link_sta_mode, true);
 
 	for (i = 0; i < NUM_WEP_KEYS; i++) {
 		key = (struct ieee80211_key_conf *)mwl_vif->wep_key_conf[i].key;
@@ -723,10 +722,7 @@ static int mwl_mac80211_sta_remove(struct ieee80211_hw *hw,
 
 	rc = mwl_fwcmd_set_new_stn_del(hw, vif, sta->addr);
 
-	if (vif->type == NL80211_IFTYPE_STATION)
-		mwl_hif_set_sta_id(hw, sta, true, false);
-	else
-		mwl_hif_set_sta_id(hw, sta, false, false);
+	mwl_hif_set_sta_id(hw, sta, sta_info->link_sta_mode, false);
 
 	if (priv->chip_type != MWL8964)
 		utils_free_stnid(priv, sta_info->stnid);

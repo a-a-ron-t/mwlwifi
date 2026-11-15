@@ -474,6 +474,10 @@ struct mwl_sta {
 	u16 stnid;
 	u16 sta_stnid;
 	bool wds;
+	/* How the station was linked by set_sta_id(), so that removing it
+	 * clears the same slot.
+	 */
+	bool link_sta_mode;
 	bool is_mesh_node;
 	bool is_ampdu_allowed;
 	struct mwl_tx_info tx_stats[MWL_MAX_TID];
