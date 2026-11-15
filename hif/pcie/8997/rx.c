@@ -387,7 +387,8 @@ int pcie_8997_poll_napi(struct napi_struct *napi, int budget)
 
 		pkt_len = le16_to_cpu(curr_hndl->pdesc->pkt_len);
 
-		if (unlikely(pkt_len > desc->rx_buf_size)) {
+		if (unlikely(pkt_len < sizeof(struct pcie_dma_data) ||
+			     pkt_len > desc->rx_buf_size)) {
 			page_pool_recycle_direct(pool, page);
 			goto refill;
 		}
@@ -428,7 +429,8 @@ int pcie_8997_poll_napi(struct napi_struct *napi, int budget)
 			* 0 for triggering Counter
 			* Measure of MMIC failure.
 			*/
-			if (status->flag & RX_FLAG_MMIC_ERROR) {
+			if ((status->flag & RX_FLAG_MMIC_ERROR) &&
+			    pkt_len + 4 <= desc->rx_buf_size) {
 				struct pcie_dma_data *dma_data;
 
 				dma_data = (struct pcie_dma_data *)
