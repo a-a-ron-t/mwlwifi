@@ -561,12 +561,9 @@ static int mwl_fwcmd_set_ap_beacon(struct mwl_priv *priv,
 	struct hostcmd_cmd_ap_beacon *pcmd = priv->pcmd_buf;
 	struct ds_params *phy_ds_param_set;
 
-	/* wmm structure of start command is defined less one byte,
-	 * due to following field country is not used, add byte one
-	 * to bypass the check.
-	 */
+	/* A WMM parameter element is exactly the size of wmm_param. */
 	if (mwl_vif->beacon_info.ie_wmm_len >
-	    (sizeof(pcmd->start_cmd.wmm_param) + 1))
+	    sizeof(pcmd->start_cmd.wmm_param))
 		goto ielenerr;
 
 	if (mwl_vif->beacon_info.ie_wpa_len > sizeof(pcmd->start_cmd.wpa_ie))
@@ -1334,7 +1331,7 @@ int mwl_fwcmd_broadcast_ssid_enable(struct ieee80211_hw *hw,
 	pcmd->cmd_hdr.macid = mwl_vif->macid;
 	pcmd->enable = cpu_to_le32(enable);
 	if (priv->chip_type == MWL8997)
-		pcmd->hidden_ssid_info = enable ? 0 : 2;
+		pcmd->hidden_ssid_info = cpu_to_le32(enable ? 0 : 2);
 
 	if (mwl_hif_exec_cmd(hw, HOSTCMD_CMD_BROADCAST_SSID_ENABLE)) {
 		mutex_unlock(&priv->fwcmd_mutex);
@@ -3167,7 +3164,7 @@ int mwl_fwcmd_led_ctrl(struct ieee80211_hw *hw, u8 enable, u8 rate)
 	memset(pcmd, 0x00, sizeof(*pcmd));
 	pcmd->cmd_hdr.cmd = cpu_to_le16(HOSTCMD_CMD_LED_CTRL);
 	pcmd->cmd_hdr.len = cpu_to_le16(sizeof(*pcmd));
-	pcmd->action = 1; /* 1: set */
+	pcmd->action = cpu_to_le16(1); /* 1: set */
 	pcmd->led_enable = enable;
 	pcmd->led_control = 1; /* 1: SW */
 
@@ -3332,6 +3329,7 @@ int mwl_fwcmd_get_fw_region_code_sc4(struct ieee80211_hw *hw,
 	struct mwl_priv *priv = hw->priv;
 	struct hostcmd_cmd_get_fw_region_code_sc4 *pcmd;
 	u16 cmd;
+	u32 status;
 
 	pcmd = priv->pcmd_buf;
 
@@ -3352,8 +3350,9 @@ int mwl_fwcmd_get_fw_region_code_sc4(struct ieee80211_hw *hw,
 		return -EINVAL;
 	}
 
-	if (pcmd->status)
-		*fw_region_code = (pcmd->status == 1) ? 0 : pcmd->status;
+	status = le32_to_cpu(pcmd->status);
+	if (status)
+		*fw_region_code = (status == 1) ? 0 : status;
 	else
 		*fw_region_code = le32_to_cpu(pcmd->fw_region_code);
 
@@ -3629,7 +3628,7 @@ int mwl_fwcmd_set_txpwrlmt_cfg_data(struct ieee80211_hw *hw)
 
 		memset(pcmd, 0x00, sizeof(*pcmd));
 		pcmd->action = cpu_to_le16(HOSTCMD_ACT_GEN_SET);
-		pcmd->subband_id = hdr.id;
+		pcmd->subband_id = le16_to_cpu(hdr.id);
 		pcmd->data_len = cpu_to_le16(data_len);
 		pcmd->num_entries = hdr.num_entries;
 

@@ -257,7 +257,7 @@ static int pcie_init_8997(struct ieee80211_hw *hw)
 	set_hw_spec.tx_wcb_num_per_queue =
 			cpu_to_le32(PCIE_MAX_TXRX_BD);
 	set_hw_spec.num_tx_queues = cpu_to_le32(1);
-	set_hw_spec.features |= HW_SET_PARMS_FEATURES_HOST_PROBE_RESP;
+	set_hw_spec.features |= cpu_to_le32(HW_SET_PARMS_FEATURES_HOST_PROBE_RESP);
 	set_hw_spec.total_rx_wcb = cpu_to_le32(PCIE_MAX_NUM_RX_DESC);
 	set_hw_spec.rxpd_wr_ptr = cpu_to_le32(pcie_priv->desc_data[0].pphys_rx_ring);
 	rc = mwl_fwcmd_set_hw_specs(hw, &set_hw_spec);
@@ -352,7 +352,7 @@ static int pcie_init_8864(struct ieee80211_hw *hw)
 	for (i = 1; i < SYSADPT_TOTAL_TX_QUEUES; i++)
 		set_hw_spec.wcb_base[i] = cpu_to_le32(
 			pcie_priv->desc_data[i].pphys_tx_ring);
-	set_hw_spec.features |= HW_SET_PARMS_FEATURES_HOST_PROBE_RESP;
+	set_hw_spec.features |= cpu_to_le32(HW_SET_PARMS_FEATURES_HOST_PROBE_RESP);
 	set_hw_spec.tx_wcb_num_per_queue =
 			cpu_to_le32(PCIE_MAX_NUM_TX_DESC);
 	set_hw_spec.num_tx_queues = cpu_to_le32(PCIE_NUM_OF_DESC_DATA);
@@ -1442,6 +1442,7 @@ static void pcie_process_account(struct ieee80211_hw *hw)
 	struct mwl_sta *sta_info;
 	u16 nf_a, nf_b, nf_c, nf_d;
 	u16 stnid;
+	u32 attempts;
 	u8 type;
 
 	acnt_head = readl(pcie_priv->iobase1 + MACREG_REG_ACNTHEAD);
@@ -1552,16 +1553,17 @@ static void pcie_process_account(struct ieee80211_hw *hw)
 			stnid = le16_to_cpu(acnt_ra->stn_id);
 			if ((stnid > 0) && (stnid <= priv->stnid_num)) {
 				type = acnt_ra->type;
+				attempts = le32_to_cpu(acnt_ra->tx_attempt_cnt);
 				if (type < 2) {
-					if (acnt_ra->tx_attempt_cnt >= 250)
+					if (attempts >= 250)
 						priv->ra_tx_attempt[type][5]++;
-					else if (acnt_ra->tx_attempt_cnt >= 100)
+					else if (attempts >= 100)
 						priv->ra_tx_attempt[type][4]++;
-					else if (acnt_ra->tx_attempt_cnt >= 50)
+					else if (attempts >= 50)
 						priv->ra_tx_attempt[type][3]++;
-					else if (acnt_ra->tx_attempt_cnt >= 15)
+					else if (attempts >= 15)
 						priv->ra_tx_attempt[type][2]++;
-					else if (acnt_ra->tx_attempt_cnt >= 4)
+					else if (attempts >= 4)
 						priv->ra_tx_attempt[type][1]++;
 					else
 						priv->ra_tx_attempt[type][0]++;
