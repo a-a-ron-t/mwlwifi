@@ -336,6 +336,7 @@ struct mwl_priv {
 	u8 bf_type;
 
 	struct thermal_cooling_device *cdev;
+	struct device *hwmon_dev;
 	u32 throttle_state;
 	u32 quiet_period;
 	int temperature;

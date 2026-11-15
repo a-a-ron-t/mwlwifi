@@ -151,10 +151,12 @@ int mwl_thermal_register(struct mwl_priv *priv)
 	if (!IS_REACHABLE(CONFIG_HWMON))
 		return 0;
 
-	hwmon_dev =
-		devm_hwmon_device_register_with_groups(priv->dev,
-						       "mwlwifi_hwmon", priv,
-						       mwl_hwmon_groups);
+	/* Not devm: reading the temperature sends a firmware command, so
+	 * the sensor has to go before the host interface is torn down.
+	 */
+	hwmon_dev = hwmon_device_register_with_groups(priv->dev,
+						      "mwlwifi_hwmon", priv,
+						      mwl_hwmon_groups);
 	if (IS_ERR(hwmon_dev)) {
 		wiphy_err(priv->hw->wiphy,
 			  "failed to register hwmon device: %ld\n",
@@ -162,6 +164,7 @@ int mwl_thermal_register(struct mwl_priv *priv)
 		ret = -EINVAL;
 		goto err_remove_link;
 	}
+	priv->hwmon_dev = hwmon_dev;
 
 	return 0;
 
@@ -178,6 +181,10 @@ void mwl_thermal_unregister(struct mwl_priv *priv)
 	if (priv->chip_type != MWL8897)
 		return;
 
+	if (priv->hwmon_dev) {
+		hwmon_device_unregister(priv->hwmon_dev);
+		priv->hwmon_dev = NULL;
+	}
 	sysfs_remove_link(&priv->dev->kobj, "cooling_device");
 	thermal_cooling_device_unregister(priv->cdev);
 }
