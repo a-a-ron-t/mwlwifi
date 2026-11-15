@@ -1407,6 +1407,25 @@ static void pcie_bf_mimo_ctrl_decode(struct mwl_priv *priv,
 		  le64_to_cpu(bf_mimo_ctrl->comp_bf_rep));
 }
 
+/* Smallest record length the decoder below reads for each record type. */
+static size_t pcie_acnt_min_len(u16 code)
+{
+	switch (code) {
+	case ACNT_CODE_TX_ENQUEUE:
+		return sizeof(struct acnt_tx_s);
+	case ACNT_CODE_RX_PPDU:
+		return sizeof(struct acnt_rx_s) + sizeof(struct pcie_dma_data);
+	case ACNT_CODE_RA_STATS:
+		return sizeof(struct acnt_ra_s);
+	case ACNT_CODE_BA_STATS:
+		return sizeof(struct acnt_ba_s);
+	case ACNT_CODE_BF_MIMO_CTRL:
+		return sizeof(struct acnt_bf_mimo_ctrl_s);
+	default:
+		return offsetof(struct acnt_s, tsf);
+	}
+}
+
 static void pcie_process_account(struct ieee80211_hw *hw)
 {
 	struct mwl_priv *priv = hw->priv;
@@ -1414,6 +1433,8 @@ static void pcie_process_account(struct ieee80211_hw *hw)
 	struct pcie_desc_data_ndp *desc = &pcie_priv->desc_data_ndp;
 	u32 acnt_head, acnt_tail;
 	u32 read_size;
+	size_t rec_len;
+	u16 code;
 	u8 *acnt_recds;
 	u8 *pstart, *pend;
 	struct acnt_s *acnt;
@@ -1433,6 +1454,14 @@ static void pcie_process_account(struct ieee80211_hw *hw)
 
 	if (acnt_tail == acnt_head)
 		return;
+
+	if (acnt_head > desc->acnt_ring_size ||
+	    acnt_tail > desc->acnt_ring_size) {
+		wiphy_err_ratelimited(hw->wiphy,
+				      "account ring index out of range (%u %u)\n",
+				      acnt_head, acnt_tail);
+		return;
+	}
 
 	if (acnt_tail > acnt_head) {
 		read_size = desc->acnt_ring_size - acnt_tail + acnt_head;
@@ -1461,10 +1490,22 @@ static void pcie_process_account(struct ieee80211_hw *hw)
 
 	pstart = acnt_recds;
 	pend = pstart + read_size;
-	while (pstart < pend) {
+	while (pend - pstart >= offsetof(struct acnt_s, tsf)) {
 		acnt = (struct acnt_s *)pstart;
+		code = le16_to_cpu(acnt->code);
+		rec_len = acnt->len * 4;
 
-		switch (le16_to_cpu(acnt->code)) {
+		if (!rec_len)
+			break;
+
+		if (rec_len > pend - pstart || rec_len < pcie_acnt_min_len(code)) {
+			wiphy_warn_ratelimited(hw->wiphy,
+					       "corrupt accounting record (code 0x%x len %u)\n",
+					       code, acnt->len);
+			break;
+		}
+
+		switch (code) {
 		case ACNT_CODE_BUSY:
 			pcie_priv->acnt_busy++;
 			break;
@@ -1560,10 +1601,7 @@ static void pcie_process_account(struct ieee80211_hw *hw)
 			break;
 		}
 
-		if (acnt->len)
-			pstart += acnt->len * 4;
-		else
-			goto process_next;
+		pstart += rec_len;
 	}
 process_next:
 	acnt_tail = acnt_head;
