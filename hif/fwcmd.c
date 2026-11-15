@@ -684,6 +684,10 @@ static int mwl_fwcmd_set_country_code(struct mwl_priv *priv,
 	bool enable = false;
 
 	if (b_inf->ie_country_ptr) {
+		/* The element has at least a 3-byte country string. */
+		if (b_inf->ie_country_len < 5)
+			return -EINVAL;
+
 		if (bss_conf->chanreq.oper.chan->band == NL80211_BAND_2GHZ)
 			a_band = false;
 		else if (bss_conf->chanreq.oper.chan->band == NL80211_BAND_5GHZ)
@@ -957,6 +961,9 @@ int mwl_fwcmd_get_addr_value(struct ieee80211_hw *hw, u32 addr, u32 len,
 	struct mwl_priv *priv = hw->priv;
 	struct hostcmd_cmd_mem_addr_access *pcmd = priv->pcmd_buf;
 	int i;
+
+	if (!len || len > ARRAY_SIZE(pcmd->value))
+		return -EINVAL;
 
 	mutex_lock(&priv->fwcmd_mutex);
 
@@ -1460,8 +1467,13 @@ int mwl_fwcmd_set_rf_channel(struct ieee80211_hw *hw,
 	mutex_unlock(&priv->fwcmd_mutex);
 
 	if (priv->sw_scanning) {
-		priv->survey_info_idx++;
-		mwl_fwcmd_get_survey(hw, priv->survey_info_idx);
+		/* The scan can visit more channels than there are slots,
+		 * since it also returns to the operating channel.
+		 */
+		if (priv->survey_info_idx < ARRAY_SIZE(priv->survey_info)) {
+			priv->survey_info_idx++;
+			mwl_fwcmd_get_survey(hw, priv->survey_info_idx);
+		}
 	} else {
 		mwl_fwcmd_get_survey(hw, 0);
 		memset(&priv->cur_survey_info, 0,
@@ -2929,6 +2941,15 @@ int mwl_fwcmd_set_wsc_ie(struct ieee80211_hw *hw, u8 len, u8 *data)
 	struct hostcmd_cmd_set_wsc_ie *pcmd;
 
 	pcmd = priv->pcmd_buf;
+
+	/* The command has room for WSC_IE_MAX_LENGTH bytes, which is all
+	 * the firmware ever received of a longer element.
+	 */
+	if (len > sizeof(pcmd->data)) {
+		wiphy_warn_ratelimited(hw->wiphy,
+				       "WSC IE truncated from %u bytes\n", len);
+		len = sizeof(pcmd->data);
+	}
 
 	mutex_lock(&priv->fwcmd_mutex);
 

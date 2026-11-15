@@ -652,7 +652,7 @@ static void mwl_heartbeat_handle(struct work_struct *work)
 {
 	struct mwl_priv *priv =
 		container_of(work, struct mwl_priv, heartbeat_handle);
-	u32 val;
+	u32 val = 0;
 
 	mwl_fwcmd_get_addr_value(priv->hw, 0, 1, &val, 0);
 	priv->heartbeating = false;
@@ -683,6 +683,13 @@ static void mwl_watchdog_ba_events(struct work_struct *work)
 			stream_index = bitmap + 3; /** queue 0 is stream 3*/
 
 		if (bitmap != 0xFF) {
+			if (stream_index >= priv->ampdu_num) {
+				spin_unlock_bh(&priv->stream_lock);
+				wiphy_warn(priv->hw->wiphy,
+					   "BA watchdog: bad queue %u\n", bitmap);
+				return;
+			}
+
 			/* Check if the stream is in use before disabling it */
 			streams = &priv->ampdu[stream_index];
 

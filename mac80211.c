@@ -76,10 +76,11 @@ static void mwl_get_rateinfo(struct mwl_priv *priv, u8 *addr,
 	rate_idx = rate_table;
 	rate_info = le32_to_cpu(*(__le32 *)rate_idx);
 	tx_hist_data = &sta_info->tx_hist.su_rate[0];
+	/* The table ends at a zero entry or after its last slot. */
 	while (rate_info) {
-		if (idx < SYSADPT_MAX_RATE_ADAPT_RATES)
-			tx_hist_data[idx].rateinfo = rate_info;
-		idx++;
+		tx_hist_data[idx].rateinfo = rate_info;
+		if (++idx >= SYSADPT_MAX_RATE_ADAPT_RATES)
+			break;
 		rate_idx += (2 * sizeof(__le32));
 		rate_info = le32_to_cpu(*(__le32 *)rate_idx);
 	}
@@ -267,9 +268,11 @@ static void mwl_mac80211_remove_vif(struct mwl_priv *priv,
 	if (vif->type == NL80211_IFTYPE_MONITOR) {
 		int counter = 0;
 		struct ieee80211_vif *_vif;
+		struct mwl_vif *iter;
+
 		spin_lock_bh(&priv->vif_lock);
-		list_for_each_entry(mwl_vif, &priv->vif_list, list) {
-			_vif = container_of((void *)mwl_vif, struct ieee80211_vif,
+		list_for_each_entry(iter, &priv->vif_list, list) {
+			_vif = container_of((void *)iter, struct ieee80211_vif,
 					drv_priv);
 
 			if (_vif->type == NL80211_IFTYPE_MONITOR)

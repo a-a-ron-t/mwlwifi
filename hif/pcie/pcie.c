@@ -122,21 +122,16 @@ static u32 pcie_read_mac_reg(struct pcie_priv *pcie_priv, u32 offset)
 	struct mwl_priv *priv = pcie_priv->mwl_priv;
 
 	if (priv->chip_type == MWL8964) {
-		u32 *addr_val = kmalloc(64 * sizeof(u32), GFP_ATOMIC);
-		u32 val;
+		/* The firmware returns as many words as the length asks for. */
+		u32 addr_val[4] = {};
 
-		if (addr_val) {
-			mwl_fwcmd_get_addr_value(priv->hw,
-						 0x8000a000 + offset, 4,
-						 addr_val, 0);
-			val = addr_val[0];
-			kfree(addr_val);
-			return val;
-		}
-		return 0;
-	} else
-		return le32_to_cpu(*(__le32 *)
-		       (MAC_REG_ADDR_PCI(offset)));
+		if (mwl_fwcmd_get_addr_value(priv->hw, 0x8000a000 + offset,
+					     ARRAY_SIZE(addr_val), addr_val, 0))
+			return 0;
+		return addr_val[0];
+	}
+
+	return readl(MAC_REG_ADDR_PCI(offset));
 }
 
 static bool pcie_chk_adapter(struct pcie_priv *pcie_priv)
