@@ -147,7 +147,8 @@ int mwl_thermal_register(struct mwl_priv *priv)
 	priv->cdev = cdev;
 	priv->quiet_period = SYSADPT_QUIET_PERIOD_DEFAULT;
 
-	if (!IS_ENABLED(CONFIG_HWMON))
+	/* HWMON may be a module when this driver is built in. */
+	if (!IS_REACHABLE(CONFIG_HWMON))
 		return 0;
 
 	hwmon_dev =

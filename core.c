@@ -882,25 +882,32 @@ static int mwl_wl_init(struct mwl_priv *priv)
 	spin_lock_init(&priv->stream_lock);
 	spin_lock_init(&priv->stnid_lock);
 
-	rc = mwl_thermal_register(priv);
-	if (rc) {
-		wiphy_err(hw->wiphy, "fail to register thermal framework\n");
-		goto err_thermal_register;
-	}
-
 	rc = mwl_hif_init(hw);
 	if (rc) {
 		wiphy_err(hw->wiphy, "fail to initialize host interface\n");
 		goto err_hif_init;
 	}
 
+	/* The cooling device sends firmware commands, so it can only be
+	 * registered once the host interface is up.
+	 */
+	rc = mwl_thermal_register(priv);
+	if (rc) {
+		wiphy_err(hw->wiphy, "fail to register thermal framework\n");
+		goto err_thermal_register;
+	}
+
 	SET_IEEE80211_PERM_ADDR(hw, priv->hw_data.mac_addr);
 
 	if (priv->chip_type == MWL8964) {
 		addr_num = SYSADPT_NUM_OF_AP + SYSADPT_NUM_OF_CLIENT;
-		hw->wiphy->n_addresses = addr_num;
 		hw->wiphy->addresses =
-			kzalloc(addr_num * sizeof(*mac_addr), GFP_KERNEL);
+			kcalloc(addr_num, sizeof(*mac_addr), GFP_KERNEL);
+		if (!hw->wiphy->addresses) {
+			rc = -ENOMEM;
+			goto err_addresses;
+		}
+		hw->wiphy->n_addresses = addr_num;
 
 		mac_addr = &hw->wiphy->addresses[0];
 		ether_addr_copy(mac_addr->addr, priv->hw_data.mac_addr);
@@ -998,13 +1005,17 @@ static int mwl_wl_init(struct mwl_priv *priv)
 	priv->jiffies_ampdu = jiffies;
 	return rc;
 
-err_register_hw:
 err_register_irq:
-	mwl_hif_deinit(hw);
-
-err_hif_init:
+	ieee80211_unregister_hw(hw);
+err_register_hw:
+	kfree(hw->wiphy->addresses);
+	hw->wiphy->addresses = NULL;
+	hw->wiphy->n_addresses = 0;
+err_addresses:
+	mwl_thermal_unregister(priv);
 err_thermal_register:
-
+	mwl_hif_deinit(hw);
+err_hif_init:
 	wiphy_err(hw->wiphy, "init fail\n");
 
 	return rc;
@@ -1021,9 +1032,9 @@ static void mwl_wl_deinit(struct mwl_priv *priv)
 		priv->irq = -1;
 	}
 
-	if (priv->chip_type == MWL8964)
-		kfree(hw->wiphy->addresses);
 	ieee80211_unregister_hw(hw);
+	kfree(hw->wiphy->addresses);
+	hw->wiphy->addresses = NULL;
 	mwl_thermal_unregister(priv);
 	cancel_work_sync(&priv->chnl_switch_handle);
 	cancel_work_sync(&priv->account_handle);

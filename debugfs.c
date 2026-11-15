@@ -1032,7 +1032,8 @@ static ssize_t mwl_debugfs_thermal_write(struct file *file,
 		goto err;
 	}
 
-	if (throttle_state > SYSADPT_THERMAL_THROTTLE_MAX) {
+	if (throttle_state < 0 ||
+	    throttle_state > SYSADPT_THERMAL_THROTTLE_MAX) {
 		wiphy_warn(priv->hw->wiphy,
 			   "throttle state %d is exceeding the limit %d\n",
 			   throttle_state, SYSADPT_THERMAL_THROTTLE_MAX);
