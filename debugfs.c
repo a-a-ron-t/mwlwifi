@@ -648,8 +648,10 @@ static ssize_t mwl_debugfs_ampdu_read(struct file *file, char __user *ubuf,
 	if (!p)
 		return -ENOMEM;
 
-	if (priv->chip_type == MWL8964)
+	if (priv->chip_type == MWL8964) {
+		free_page(page);
 		return -EPERM;
+	}
 
 	len += scnprintf(p + len, size - len, "debug_ampdu: %d\n", priv->debug_ampdu);
 	len += scnprintf(p + len, size - len, "=================\n");
@@ -1062,6 +1064,7 @@ static ssize_t mwl_debugfs_ratetable_read(struct file *file, char __user *ubuf,
 	u32 rate_info;
 	u8 fmt, stbc, bw, sgi, mcs, preamble_gf, power_id, ldpc, bf, ant;
 	int idx, rate, nss;
+	bool found;
 	ssize_t ret;
 
 	if (!p)
@@ -1072,16 +1075,23 @@ static ssize_t mwl_debugfs_ratetable_read(struct file *file, char __user *ubuf,
 		goto err;
 	}
 
+	found = false;
 	spin_lock_bh(&priv->sta_lock);
 	list_for_each_entry(sta_info, &priv->sta_list, list) {
 		sta = container_of((void *)sta_info, struct ieee80211_sta,
 				   drv_priv);
 		if (priv->ra_aid == sta->aid) {
 			ether_addr_copy(addr, sta->addr);
+			found = true;
 			break;
 		}
 	}
 	spin_unlock_bh(&priv->sta_lock);
+
+	if (!found) {
+		ret = -EINVAL;
+		goto err;
+	}
 
 	rate_table = kzalloc(size, GFP_KERNEL);
 	if (!rate_table) {
@@ -1103,7 +1113,7 @@ static ssize_t mwl_debugfs_ratetable_read(struct file *file, char __user *ubuf,
 	idx = 0;
 	rate_idx = rate_table;
 	rate_info = le32_to_cpu(*(__le32 *)rate_idx);
-	while (rate_info) {
+	while (rate_info && idx < SYSADPT_MAX_RATE_ADAPT_RATES) {
 		fmt = rate_info & MWL_TX_RATE_FORMAT_MASK;
 		stbc = (rate_info & MWL_TX_RATE_STBC_MASK) >>
 			MWL_TX_RATE_STBC_SHIFT;
@@ -1211,11 +1221,13 @@ static ssize_t mwl_debugfs_tx_hist_read(struct file *file, char __user *ubuf,
 	struct mwl_sta *sta_info;
 	ssize_t ret;
 
-	if (priv->chip_type != MWL8964)
-		return -EPERM;
-
 	if (!p)
 		return -ENOMEM;
+
+	if (priv->chip_type != MWL8964) {
+		free_page(page);
+		return -EPERM;
+	}
 
 	len += scnprintf(p + len, size - len,
 			 "SU: <4:%d >=4:%d >=15:%d >=50:%d >=100:%d >=250:%d\n",
@@ -1293,6 +1305,27 @@ err:
 	return ret;
 }
 
+/* Like utils_find_sta_by_aid(), but the caller holds sta_lock and keeps it
+ * for as long as it uses the station.
+ */
+static struct mwl_sta *mwl_debugfs_find_sta_locked(struct mwl_priv *priv,
+						   u16 aid)
+{
+	struct mwl_sta *sta_info;
+	struct ieee80211_sta *sta;
+
+	lockdep_assert_held(&priv->sta_lock);
+
+	list_for_each_entry(sta_info, &priv->sta_list, list) {
+		sta = container_of((void *)sta_info, struct ieee80211_sta,
+				   drv_priv);
+		if (sta->aid == aid)
+			return sta_info;
+	}
+
+	return NULL;
+}
+
 static ssize_t mwl_debugfs_ba_hist_read(struct file *file, char __user *ubuf,
 					size_t count, loff_t *ppos)
 {
@@ -1315,7 +1348,11 @@ static ssize_t mwl_debugfs_ba_hist_read(struct file *file, char __user *ubuf,
 	if (!p)
 		return -ENOMEM;
 
-	sta_info = utils_find_sta_by_aid(priv, priv->ba_aid);
+	/* The accounting path writes the histogram, and a write to this
+	 * file frees it, under sta_lock.
+	 */
+	spin_lock_bh(&priv->sta_lock);
+	sta_info = mwl_debugfs_find_sta_locked(priv, priv->ba_aid);
 	if (sta_info && sta_info->ba_hist.enable &&
 	    sta_info->ba_hist.ba_stats) {
 		ba_stats = sta_info->ba_hist.ba_stats;
@@ -1376,6 +1413,7 @@ static ssize_t mwl_debugfs_ba_hist_read(struct file *file, char __user *ubuf,
 				 "No BA histogram for sta aid: %d\n",
 				 priv->ba_aid);
 	}
+	spin_unlock_bh(&priv->sta_lock);
 
 	ret = simple_read_from_buffer(ubuf, count, ppos, p, len);
 
@@ -1393,7 +1431,7 @@ static ssize_t mwl_debugfs_ba_hist_write(struct file *file,
 	size_t buf_size = min_t(size_t, count, PAGE_SIZE - 1);
 	int sta_aid;
 	struct mwl_sta *sta_info;
-	int size;
+	struct mwl_tx_ba_stats *ba_stats, *old_stats = NULL;
 	ssize_t ret;
 
 	if (!buf)
@@ -1416,27 +1454,40 @@ static ssize_t mwl_debugfs_ba_hist_write(struct file *file,
 		goto err;
 	}
 
+	ba_stats = kcalloc(ACNT_BA_SIZE, sizeof(*ba_stats), GFP_KERNEL);
+	if (!ba_stats) {
+		ret = -ENOMEM;
+		goto err;
+	}
+
+	spin_lock_bh(&priv->sta_lock);
 	if (priv->ba_aid) {
-		sta_info = utils_find_sta_by_aid(priv, priv->ba_aid);
+		sta_info = mwl_debugfs_find_sta_locked(priv, priv->ba_aid);
 		if (sta_info) {
 			sta_info->ba_hist.enable = false;
-			kfree(sta_info->ba_hist.ba_stats);
+			old_stats = sta_info->ba_hist.ba_stats;
+			sta_info->ba_hist.ba_stats = NULL;
 		}
 	}
 	priv->ba_aid = 0;
-	sta_info = utils_find_sta_by_aid(priv, sta_aid);
+	sta_info = mwl_debugfs_find_sta_locked(priv, sta_aid);
 	if (sta_info) {
-		sta_info->ba_hist.enable = true;
+		/* The same station may have been selected before. */
+		kfree(old_stats);
+		old_stats = sta_info->ba_hist.ba_stats;
+		sta_info->ba_hist.ba_stats = ba_stats;
 		sta_info->ba_hist.index = 0;
-		size = sizeof(struct mwl_tx_ba_stats) * ACNT_BA_SIZE;
-		sta_info->ba_hist.ba_stats = kmalloc(size, GFP_KERNEL);
-		if (sta_info->ba_hist.ba_stats) {
-			memset(sta_info->ba_hist.ba_stats, 0, size);
-			priv->ba_aid = sta_aid;
-		}
+		sta_info->ba_hist.enable = true;
+		priv->ba_aid = sta_aid;
+		ba_stats = NULL;
 		ret = count;
-	} else
+	} else {
 		ret = -EINVAL;
+	}
+	spin_unlock_bh(&priv->sta_lock);
+
+	kfree(old_stats);
+	kfree(ba_stats);
 
 err:
 	free_page(addr);
@@ -1587,11 +1638,13 @@ static ssize_t mwl_debugfs_core_dump_write(struct file *file,
 	int text_mode;
 	ssize_t ret;
 
-	if (priv->chip_type != MWL8964)
-		return -EPERM;
-
 	if (!buf)
 		return -ENOMEM;
+
+	if (priv->chip_type != MWL8964) {
+		ret = -EPERM;
+		goto err;
+	}
 
 	if (copy_from_user(buf, ubuf, buf_size)) {
 		ret = -EFAULT;

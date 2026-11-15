@@ -120,8 +120,17 @@ int utils_get_phy_rate(u8 format, u8 bandwidth, u8 short_gi, u8 mcs_id)
 		index = (nss_11ac << 1) | short_gi;
 	}
 
-	if (format != TX_RATE_FORMAT_11AC)
+	if (format != TX_RATE_FORMAT_11AC) {
+		if (mcs_id >= ARRAY_SIZE(phy_rate) ||
+		    index >= ARRAY_SIZE(phy_rate[0]))
+			return 0;
 		return (phy_rate[mcs_id][index] / 2);
+	}
+
+	/* All four 11ac tables have the same shape. */
+	if (rate_11ac >= ARRAY_SIZE(phy_rate_11ac20M) ||
+	    index >= ARRAY_SIZE(phy_rate_11ac20M[0]))
+		return 0;
 
 	if (bandwidth == TX_RATE_BANDWIDTH_20)
 		return (phy_rate_11ac20M[rate_11ac][index] / 2);

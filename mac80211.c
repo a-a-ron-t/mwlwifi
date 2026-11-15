@@ -712,6 +712,7 @@ static int mwl_mac80211_sta_remove(struct ieee80211_hw *hw,
 	struct mwl_priv *priv = hw->priv;
 	int rc;
 	struct mwl_sta *sta_info = mwl_dev_get_sta(sta);
+	struct mwl_tx_ba_stats *ba_stats;
 
 	mwl_hif_tx_del_sta_amsdu_pkts(hw, sta);
 	mwl_fwcmd_del_sta_streams(hw, sta);
@@ -731,7 +732,12 @@ static int mwl_mac80211_sta_remove(struct ieee80211_hw *hw,
 
 	spin_lock_bh(&priv->sta_lock);
 	list_del(&sta_info->list);
+	sta_info->ba_hist.enable = false;
+	ba_stats = sta_info->ba_hist.ba_stats;
+	sta_info->ba_hist.ba_stats = NULL;
 	spin_unlock_bh(&priv->sta_lock);
+
+	kfree(ba_stats);
 
 	return rc;
 }
